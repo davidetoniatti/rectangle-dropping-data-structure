@@ -1,0 +1,455 @@
+<title>RDDS Player</title>
+<style>
+  :root {
+    --bg: #f7f7f4;
+    --surface: #ffffff;
+    --ink: #24272c;
+    --muted: #6d7078;
+    --line: #e3e3de;
+    --accent: #2a78d6;
+    --corridor: #eb6834;
+    --answer: #008300;
+    --chunk: #1baf7a;
+    --focus: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171c; --surface: #1d2026; --ink: #e7e8e3; --muted: #9a9da4;
+      --line: #2c2f36; --accent: #3987e5; --corridor: #f0844e;
+      --answer: #31a831; --chunk: #1fc98c; --focus: #3987e5;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f7f4; --surface: #ffffff; --ink: #24272c; --muted: #6d7078;
+    --line: #e3e3de; --accent: #2a78d6; --corridor: #eb6834;
+    --answer: #008300; --chunk: #1baf7a; --focus: #2a78d6;
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171c; --surface: #1d2026; --ink: #e7e8e3; --muted: #9a9da4;
+    --line: #2c2f36; --accent: #3987e5; --corridor: #f0844e;
+    --answer: #31a831; --chunk: #1fc98c; --focus: #3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 40px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; margin-bottom: 18px; }
+  .head-text { flex: 1 1 340px; }
+  .eyebrow {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 4px;
+  }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: 13.5px; margin: 4px 0 0; max-width: 60ch; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .chip { width: 14px; height: 0; border-top: 3px solid; border-radius: 2px; }
+  .chip.probe { border-color: var(--accent); }
+  .chip.corridor { border-color: var(--corridor); }
+  .chip.answer { border-color: var(--answer); }
+  .chip.chunkline { border-top-style: dotted; border-color: var(--chunk); }
+  .chip.sky { border-color: var(--ink); }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden;
+  }
+  #stage { display: block; width: 100%; height: 52vh; min-height: 320px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    padding: 12px 14px; border-top: 1px solid var(--line);
+  }
+  button {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .speed { display: flex; gap: 4px; }
+  .grow { flex: 1 1 160px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+  .readout {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px;
+    padding: 8px 14px 12px; font-size: 12.5px; color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+  #status { color: var(--ink); min-height: 1.2em; }
+
+  footer { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  footer code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; font-size: 11.5px;
+  }
+  footer a { color: var(--accent); }
+
+  #dropzone {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    border: 3px dashed var(--accent); font-size: 18px; color: var(--accent);
+    pointer-events: none; z-index: 10;
+  }
+  body.dragging #dropzone { display: flex; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="head-text">
+      <p class="eyebrow">arXiv:2202.10771 · Section 4 · greedy Tetris</p>
+      <h1>Rectangle Dropping Data Structure</h1>
+      <p class="sub">
+        Replay of a recorded game: every probe the query algorithm makes —
+        per-chunk gap lookups, cross-chunk corridors, the height binary search —
+        then the piece drops where the structure says.
+      </p>
+    </div>
+    <div class="legend mono" aria-hidden="true">
+      <span><i class="chip probe"></i>chunk probe</span>
+      <span><i class="chip corridor"></i>corridor</span>
+      <span><i class="chip answer"></i>answer</span>
+      <span><i class="chip chunkline"></i>chunk boundary</span>
+      <span><i class="chip sky"></i>skyline</span>
+    </div>
+  </header>
+
+  <div class="panel">
+    <canvas id="stage" role="img" aria-label="Animated Tetris board"></canvas>
+    <div class="controls">
+      <button id="restart" aria-label="Restart">⏮</button>
+      <button id="play" aria-label="Play or pause">▶ Play</button>
+      <button id="step" aria-label="Step one event">Step</button>
+      <div class="speed mono" role="group" aria-label="Playback speed">
+        <button data-speed="0.5">0.5×</button><button data-speed="1" aria-pressed="true">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button><button data-speed="8">8×</button>
+      </div>
+      <div class="grow">
+        <input id="scrub" type="range" min="0" value="0" step="1" aria-label="Timeline">
+      </div>
+      <button id="load">Load recording…</button>
+      <input id="file" type="file" accept=".json,application/json" hidden>
+    </div>
+    <div class="readout mono">
+      <span id="status">ready</span>
+      <span id="counters"></span>
+    </div>
+  </div>
+
+  <footer>
+    Drop a recording JSON anywhere on this page, or use “Load recording…”.
+    Generate one with <code>python -m rdds.demo.tetris --record game.json</code> —
+    see <a href="https://github.com/davidetoniatti/rectangle-dropping-data-structure">the repository</a>
+    and <a href="https://arxiv.org/abs/2202.10771">the paper</a>.
+    Space&nbsp;=&nbsp;play/pause, ←/→&nbsp;=&nbsp;step.
+  </footer>
+</div>
+<div id="dropzone">drop recording to load</div>
+
+<script id="recording" type="application/json">__RECORDING_JSON__</script>
+<script>
+(() => {
+  "use strict";
+
+  // ---------------------------------------------------------------- palette
+  const PIECES_LIGHT = ["#2a78d6","#1baf7a","#eda100","#008300","#4a3aa7","#e34948","#e87ba4","#eb6834"];
+  const PIECES_DARK  = ["#3987e5","#199e70","#c98500","#2f9e2f","#9085e9","#e66767","#d55181","#d95926"];
+  const mediaDark = matchMedia("(prefers-color-scheme: dark)");
+  const isDark = () => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : mediaDark.matches;
+  };
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------------------------------------------------------------- state
+  let rec = JSON.parse(document.getElementById("recording").textContent);
+  const DUR = { gap_probe: 140, height_probe: 300, query_answered: 650, piece_dropped: 600, structure: 220 };
+
+  let idx = 0;          // next event to complete
+  let phase = 0;        // ms elapsed inside current event
+  let playing = false;
+  let speed = 1;
+  let state = null;     // { skyline, chunks, pieces }
+  let viewTop = 14;     // eased world-height of the viewport
+
+  function freshState() {
+    return { skyline: [[0, rec.board_width, 0]], chunks: [0], pieces: rec.initial_pieces.map(p => p.slice()) };
+  }
+  function applyEvent(s, e) {
+    if (e.t === "structure") { s.skyline = e.skyline; s.chunks = e.chunks; }
+    else if (e.t === "piece_dropped") s.pieces.push(e.rect.slice());
+  }
+  function buildState(upto) {
+    const s = freshState();
+    for (let i = 0; i < upto; i++) applyEvent(s, rec.events[i]);
+    return s;
+  }
+  function reset(toIdx) {
+    idx = toIdx; phase = 0;
+    state = buildState(idx);
+    scrub.max = rec.events.length;
+    scrub.value = idx;
+    updateReadout();
+  }
+
+  // ---------------------------------------------------------------- text
+  const fmt = (x) => Number.isInteger(x) ? x : x.toFixed(1);
+  function describe(e) {
+    if (!e) return "done";
+    switch (e.t) {
+      case "gap_probe":
+        return e.source === "chunk"
+          ? `probe chunk #${e.chunk} @ h=${fmt(e.h)} → gap ${fmt(e.gap[0])} [${fmt(e.gap[1])}…${fmt(e.gap[2])}]`
+          : `corridor @ h=${fmt(e.h)} → gap ${fmt(e.gap[0])} [${fmt(e.gap[1])}…${fmt(e.gap[2])}]`;
+      case "height_probe":
+        return `binary search: try h=${fmt(e.h)} → widest ${e.gap ? fmt(e.gap[0]) : 0}`;
+      case "query_answered":
+        return `answer: width ${fmt(e.width)} rests at h=${fmt(e.h)}, x=${fmt(e.x)}`;
+      case "piece_dropped":
+        return `drop ${fmt(e.rect[2])}×${fmt(e.rect[3])} at x=${fmt(e.rect[0])} → lands at h=${fmt(e.rect[1])}`;
+      case "structure":
+        return `skyline updated (${e.reason}, ${e.skyline.length} segments, ${e.chunks.length} chunks)`;
+    }
+  }
+  function updateReadout() {
+    const drops = state.pieces.length - rec.initial_pieces.length;
+    const total = rec.events.filter(e => e.t === "piece_dropped").length;
+    status.textContent = idx < rec.events.length ? describe(rec.events[idx]) : `done — ${total} pieces placed`;
+    counters.textContent = `piece ${drops}/${total} · event ${idx}/${rec.events.length}`;
+  }
+
+  // ---------------------------------------------------------------- canvas
+  const canvas = document.getElementById("stage");
+  const ctx = canvas.getContext("2d");
+
+  function worldTopTarget() {
+    let top = 12;
+    for (const s of state.skyline) top = Math.max(top, s[2]);
+    const e = rec.events[idx];
+    if (e && e.t === "piece_dropped") top = Math.max(top, e.rect[1] + e.rect[3]);
+    if (e && (e.t === "height_probe" || e.t === "gap_probe")) top = Math.max(top, e.h);
+    return top + 6;
+  }
+
+  function draw() {
+    const dpr = devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr; canvas.height = h * dpr;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    viewTop += (worldTopTarget() - viewTop) * (reduced ? 1 : 0.12);
+    const padL = 36, padR = 16, padT = 14, padB = 26;
+    const sx = (w - padL - padR) / rec.board_width;
+    const sy = (h - padT - padB) / viewTop;
+    const X = (x) => padL + x * sx;
+    const Y = (y) => h - padB - y * sy;
+
+    const ink = css("--ink"), mutedC = css("--muted"), lineC = css("--line");
+    const surface = css("--surface");
+    const pal = isDark() ? PIECES_DARK : PIECES_LIGHT;
+
+    // grid + axis labels
+    ctx.font = "10px ui-monospace, Menlo, monospace";
+    ctx.fillStyle = mutedC;
+    ctx.strokeStyle = lineC;
+    ctx.lineWidth = 1;
+    const yStep = viewTop > 40 ? 10 : 5;
+    for (let gy = 0; gy <= viewTop; gy += yStep) {
+      ctx.beginPath(); ctx.moveTo(X(0), Y(gy)); ctx.lineTo(X(rec.board_width), Y(gy)); ctx.stroke();
+      ctx.textAlign = "right"; ctx.fillText(gy, padL - 6, Y(gy) + 3);
+    }
+    ctx.textAlign = "center";
+    for (let gx = 0; gx <= rec.board_width; gx += 10) ctx.fillText(gx, X(gx), h - padB + 14);
+
+    // pieces
+    for (let i = 0; i < state.pieces.length; i++) {
+      const [px, py, pw, ph] = state.pieces[i];
+      ctx.fillStyle = pal[i % pal.length];
+      ctx.strokeStyle = surface;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(X(px), Y(py + ph), pw * sx, ph * sy, 1.5);
+      ctx.fill(); ctx.stroke();
+    }
+
+    // transient of the current event
+    const e = rec.events[idx];
+    const t = e ? Math.min(1, phase / (DUR[e.t] / speed) * (reduced ? 10 : 1)) : 0;
+    if (e) drawTransient(e, t, { X, Y, sx, sy, pal, surface });
+
+    // chunk boundaries
+    ctx.strokeStyle = css("--chunk");
+    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = 1.2;
+    for (const cx of state.chunks.slice(1)) {
+      ctx.beginPath(); ctx.moveTo(X(cx), Y(0)); ctx.lineTo(X(cx), Y(viewTop)); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // skyline
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    for (const [x0, x1, y] of state.skyline) { ctx.lineTo(X(x0), Y(y)); ctx.lineTo(X(x1), Y(y)); }
+    ctx.stroke();
+
+    // walls + ground
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(viewTop)); ctx.lineTo(X(0), Y(0)); ctx.lineTo(X(rec.board_width), Y(0)); ctx.lineTo(X(rec.board_width), Y(viewTop));
+    ctx.stroke();
+  }
+
+  function arrow(g, x0, x1, y, color, width, label) {
+    const { X, Y } = g;
+    const px0 = X(x0), px1 = X(x1), py = Y(y);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width;
+    ctx.beginPath(); ctx.moveTo(px0, py); ctx.lineTo(px1, py); ctx.stroke();
+    for (const [px, dir] of [[px0, 1], [px1, -1]]) {
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + dir * 6, py - 3.5);
+      ctx.lineTo(px + dir * 6, py + 3.5);
+      ctx.fill();
+    }
+    if (label) {
+      ctx.font = "11px ui-monospace, Menlo, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(label, (px0 + px1) / 2, py - 6);
+    }
+  }
+
+  function drawTransient(e, t, g) {
+    const { X, Y, sx, sy, pal, surface } = g;
+    if (e.t === "gap_probe") {
+      const color = e.source === "chunk" ? css("--accent") : css("--corridor");
+      ctx.globalAlpha = Math.min(1, t * 3) * (t > 0.8 ? (1 - t) * 5 : 1);
+      arrow(g, e.gap[1], e.gap[2], e.h, color, 1.8, fmt(e.gap[0]));
+      ctx.globalAlpha = 1;
+    } else if (e.t === "height_probe") {
+      ctx.strokeStyle = css("--muted");
+      ctx.setLineDash([5, 5]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(X(0), Y(e.h)); ctx.lineTo(X(rec.board_width), Y(e.h)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = css("--muted");
+      ctx.font = "11px ui-monospace, Menlo, monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`h=${fmt(e.h)}`, X(0) + 5, Y(e.h) - 5);
+    } else if (e.t === "query_answered") {
+      arrow(g, e.x, e.x + e.width, e.h, css("--answer"), 2.6, `w=${fmt(e.width)} @ h=${fmt(e.h)}`);
+    } else if (e.t === "piece_dropped") {
+      const [px, py, pw, ph] = e.rect;
+      const yFrom = viewTop - ph;
+      const ease = t * t;
+      const y = yFrom + (py - yFrom) * ease;
+      ctx.fillStyle = pal[state.pieces.length % pal.length];
+      ctx.strokeStyle = surface;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(X(px), Y(y + ph), pw * sx, ph * sy, 1.5);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // ---------------------------------------------------------------- loop
+  let last = performance.now();
+  function tick(now) {
+    const dt = now - last; last = now;
+    if (playing && idx < rec.events.length) {
+      phase += dt;
+      const e = rec.events[idx];
+      if (phase >= DUR[e.t] / speed) {
+        applyEvent(state, e);
+        idx++; phase = 0;
+        scrub.value = idx;
+        updateReadout();
+        if (idx === rec.events.length) setPlaying(false);
+      }
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  // ---------------------------------------------------------------- controls
+  const scrub = document.getElementById("scrub");
+  const status = document.getElementById("status");
+  const counters = document.getElementById("counters");
+  const playBtn = document.getElementById("play");
+
+  function setPlaying(v) {
+    if (v && idx >= rec.events.length) reset(0);
+    playing = v;
+    playBtn.textContent = v ? "⏸ Pause" : "▶ Play";
+  }
+  function stepOnce(dir) {
+    setPlaying(false);
+    reset(Math.max(0, Math.min(rec.events.length, idx + dir)));
+  }
+
+  playBtn.addEventListener("click", () => setPlaying(!playing));
+  document.getElementById("restart").addEventListener("click", () => { reset(0); });
+  document.getElementById("step").addEventListener("click", () => stepOnce(1));
+  scrub.addEventListener("input", () => { setPlaying(false); reset(+scrub.value); });
+  for (const b of document.querySelectorAll(".speed button")) {
+    b.addEventListener("click", () => {
+      speed = +b.dataset.speed;
+      for (const o of document.querySelectorAll(".speed button")) o.setAttribute("aria-pressed", o === b);
+    });
+  }
+  addEventListener("keydown", (ev) => {
+    if (ev.target.tagName === "INPUT" || ev.target.tagName === "BUTTON") return;
+    if (ev.code === "Space") { ev.preventDefault(); setPlaying(!playing); }
+    else if (ev.code === "ArrowRight") stepOnce(1);
+    else if (ev.code === "ArrowLeft") stepOnce(-1);
+    else if (ev.key === "r") reset(0);
+  });
+
+  // ---------------------------------------------------------------- loading
+  const fileInput = document.getElementById("file");
+  document.getElementById("load").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+  addEventListener("dragover", (ev) => { ev.preventDefault(); document.body.classList.add("dragging"); });
+  addEventListener("dragleave", (ev) => { if (!ev.relatedTarget) document.body.classList.remove("dragging"); });
+  addEventListener("drop", (ev) => {
+    ev.preventDefault();
+    document.body.classList.remove("dragging");
+    if (ev.dataTransfer.files[0]) loadFile(ev.dataTransfer.files[0]);
+  });
+  function loadFile(file) {
+    file.text().then((text) => {
+      const data = JSON.parse(text);
+      if (typeof data.board_width !== "number" || !Array.isArray(data.events)) {
+        throw new Error("not a recording");
+      }
+      rec = data;
+      reset(0);
+      setPlaying(!reduced);
+      status.textContent = `loaded ${file.name} (${rec.events.length} events)`;
+    }).catch(() => {
+      status.textContent = `could not read ${file.name} — expected a JSON recording from --record`;
+    });
+  }
+
+  // ---------------------------------------------------------------- go
+  reset(0);
+  setPlaying(!reduced);
+  requestAnimationFrame(tick);
+})();
+</script>
